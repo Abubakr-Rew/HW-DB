@@ -1,67 +1,91 @@
-from database import engine, SessionLocal
-from models import Base, Student
+from database import engine, SessionLocal, Base
 
+from models.user import User
+from models.profile import Profile
+from models.post import Post
+from models.tag import Tag
+
+from crud.user_crud import get_or_create_user
+
+
+# создать таблицы
 Base.metadata.create_all(bind=engine)
 
 session = SessionLocal()
 
-def create_student():
-    name = input("Name: ")
-    age = int(input("Age: "))
-    course = input("Course: ")
+# -----------------------
+# 👤 USERS
+# -----------------------
+user1 = get_or_create_user(session, "john")
+user2 = get_or_create_user(session, "alice")
 
-    student = Student(name=name, age=age, course=course)
-    session.add(student)
+# -----------------------
+# 🪪 PROFILES (1:1)
+# -----------------------
+profile1 = Profile(bio="I love coding", user=user1)
+profile2 = Profile(bio="Designer", user=user2)
+
+session.add_all([profile1, profile2])
+
+# -----------------------
+# 📝 POSTS (1:N)
+# -----------------------
+post1 = Post(title="First Post", user=user1)
+post2 = Post(title="Second Post", user=user1)
+post3 = Post(title="Alice Post", user=user2)
+
+session.add_all([post1, post2, post3])
+
+# -----------------------
+# 🏷 TAGS (N:N) SAFE VERSION
+# -----------------------
+def get_or_create_tag(session, name):
+    tag = session.query(Tag).filter_by(name=name).first()
+
+    if tag:
+        return tag
+
+    tag = Tag(name=name)
+    session.add(tag)
     session.commit()
-    print("Student added!")
+    return tag
 
-def show_students():
-    students = session.query(Student).all()
-    for s in students:
-        print(s)
 
-def update_student():
-    student_id = int(input("Enter ID: "))
-    student = session.query(Student).get(student_id)
+tag1 = get_or_create_tag(session, "python")
+tag2 = get_or_create_tag(session, "life")
 
-    if student:
-        student.name = input("New name: ")
-        student.age = int(input("New age: "))
-        student.course = input("New course: ")
-        session.commit()
-        print("Updated!")
-    else:
-        print("Not found")
+post1.tags.append(tag1)
+post1.tags.append(tag2)
+post2.tags.append(tag1)
 
-def delete_student():
-    student_id = int(input("Enter ID: "))
-    student = session.query(Student).get(student_id)
+session.commit()
 
-    if student:
-        session.delete(student)
-        session.commit()
-        print("Deleted!")
-    else:
-        print("Not found")
+# -----------------------
+# 🔍 QUERIES
+# -----------------------
+print("\n--- USER BY ID ---")
+print(get_or_create_user(session, "john"))
 
-while True:
-    print("\n1. Add student")
-    print("2. Show students")
-    print("3. Update student")
-    print("4. Delete student")
-    print("5. Exit")
+print("\n--- USER POSTS ---")
+user = get_or_create_user(session, "john")
+for post in user.posts:
+    print(post.title)
 
-    choice = input("Choose: ")
+print("\n--- POSTS BY TAG python ---")
+tag = session.query(Tag).filter_by(name="python").first()
+for post in tag.posts:
+    print(post.title)
 
-    if choice == "1":
-        create_student()
-    elif choice == "2":
-        show_students()
-    elif choice == "3":
-        update_student()
-    elif choice == "4":
-        delete_student()
-    elif choice == "5":
-        break
-    else:
-        print("Invalid choice")
+# -----------------------
+# 🔄 UPDATE
+# -----------------------
+user1.username = "john_updated"
+session.commit()
+
+# -----------------------
+# 🗑 DELETE EXAMPLE
+# -----------------------
+session.delete(user2)
+session.commit()
+
+print("\nDONE")
